@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DecisionPlay Live</title>
+<meta name="description" content="A shared decision board an AI agent and a person work on together, backed by live web evidence.">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1c232c;
+    --line: #2a323d;
+    --ink: #e6edf3;
+    --ink-dim: #9aa7b4;
+    --ink-faint: #8592a1;   /* raised from #6b7785 for WCAG AA on --panel */
+    --accent: #4c9aff;
+    --accent-dim: #1f3f6b;
+    --agent: #a371f7;
+    --human: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 var(--sans);
+  }
+  a { color: var(--accent); }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { font-weight: 650; letter-spacing: -0.01em; font-size: 17px; }
+  .brand span { color: var(--accent); }
+  .tagline { color: var(--ink-dim); font-size: 13px; }
+  .spacer { flex: 1; }
+  .pill {
+    font: 500 12px/1 var(--mono); padding: 6px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--ink-dim); white-space: nowrap;
+  }
+  .pill.on { color: var(--agent); border-color: #3b2a5c; background: #1d1630; }
+  .pill.off { color: var(--ink-faint); }
+
+  #connect { background: #1b2230; border-bottom: 1px solid var(--line); }
+  .connect-in { max-width: 1100px; margin: 0 auto; padding: 11px 22px; font-size: 13px; color: var(--ink-dim); line-height: 1.6; }
+  .connect-in strong { color: var(--ink); }
+  .connect-in b { color: var(--ink); font-weight: 600; }
+
+  main { display: grid; grid-template-columns: minmax(330px, 400px) 1fr; gap: 0; align-items: start; }
+  @media (max-width: 940px) { main { grid-template-columns: 1fr; } }
+  .col { padding: 20px 22px; }
+  .col.left { border-right: 1px solid var(--line); }
+  @media (max-width: 940px) { .col.left { border-right: none; border-bottom: 1px solid var(--line); } }
+
+  h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--ink-faint); margin: 26px 0 10px; font-weight: 600;
+  }
+  h2:first-child { margin-top: 0; }
+
+  textarea, input[type=text], input[type=number] {
+    width: 100%; background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px;
+    font: 14px/1.45 var(--sans); resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent-dim); border-color: var(--accent); }
+  button {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 7px; padding: 8px 13px; font: 500 13px var(--sans); cursor: pointer;
+  }
+  button:hover { border-color: #3d4855; background: #222a34; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #06121f; font-weight: 600; }
+  button.primary:hover { background: #6aabff; }
+  button.ghost { background: transparent; color: var(--ink-dim); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 8px; }
+
+  .item {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .item .label { font-weight: 550; }
+  .item .meta { color: var(--ink-faint); font-size: 12px; margin-top: 2px; }
+  .del { margin-left: auto; color: var(--ink-faint); background: none; border: none; cursor: pointer; padding: 2px 6px; font-size: 16px; line-height: 1; }
+  .del:hover { color: var(--bad); background: none; }
+
+  input[type=number].weight {
+    width: 62px; min-width: 62px; flex: 0 0 62px; text-align: center;
+    font-family: var(--mono); font-size: 13px; padding: 7px 4px;
+  }
+  .item .row { flex-wrap: nowrap; }
+  .item .row .label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 0; text-align: left; }
+  th { background: var(--panel); font-weight: 600; font-size: 12px; color: var(--ink-dim); padding: 8px 10px; }
+  th.crit { text-align: center; }
+  th .w { display: block; font: 400 11px var(--mono); color: var(--ink-faint); }
+  td.opt { padding: 10px; font-weight: 550; background: var(--panel); vertical-align: top; }
+  td.opt .note { display: block; font-weight: 400; font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+  .cell { padding: 8px; text-align: center; cursor: pointer; position: relative; min-width: 92px; }
+  .cell:hover { background: var(--panel-2); }
+  .cell .score { font: 600 17px var(--mono); }
+  .cell .who { display: block; font: 500 10px var(--mono); letter-spacing: 0.04em; margin-top: 2px; }
+  .who.agent { color: var(--agent); }
+  .who.human { color: var(--human); }
+  .cell .empty { color: var(--ink-faint); font-size: 18px; }
+  .cell .rat { display: block; font-size: 11px; color: var(--ink-faint); margin-top: 4px; line-height: 1.35; max-width: 190px; }
+
+  .verdict { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 16px 18px; }
+  .rank { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .rank:last-of-type { border-bottom: none; }
+  .rank .n { font: 600 13px var(--mono); color: var(--ink-faint); width: 20px; }
+  .rank .nm { font-weight: 600; }
+  .rank .sc { margin-left: auto; font: 600 15px var(--mono); }
+  .rank.top .nm { color: var(--accent); }
+  .bar { height: 4px; background: var(--accent-dim); border-radius: 2px; margin-top: 5px; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+
+  .ev { border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; margin-bottom: 8px; background: var(--panel); }
+  .ev .t { font-weight: 550; font-size: 14px; }
+  .ev .s { font: 400 12px var(--mono); color: var(--ink-faint); margin-top: 3px; }
+  .ev .sn { font-size: 13px; color: var(--ink-dim); margin-top: 6px; }
+
+  .prov { display: inline-block; font: 600 10px/1 var(--mono); letter-spacing: 0.06em; padding: 4px 7px; border-radius: 4px; vertical-align: middle; }
+  .prov.verified { background: #12331d; color: #56d364; border: 1px solid #1d5a2e; }
+  .prov.modeled { background: #2e2410; color: #e3b341; border: 1px solid #5c4813; }
+
+  .cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* Inline score editor. Replaces window.prompt(), which embedded webviews
+     (including in-app browsers) routinely suppress. */
+  #editor[hidden] { display: none; }
+  #editor {
+    position: absolute; z-index: 40; width: 268px;
+    background: var(--panel); border: 1px solid #3d4855; border-radius: 9px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.55); padding: 13px;
+  }
+  #editor .eh { font-size: 12.5px; color: var(--ink-dim); margin-bottom: 9px; line-height: 1.45; }
+  #editor .eh b { color: var(--ink); }
+  #editor .was { color: var(--warn); }
+  .scores { display: flex; gap: 5px; margin-bottom: 9px; }
+  .scores button {
+    flex: 1; padding: 8px 0; font: 600 14px var(--mono); border-radius: 6px;
+  }
+  .scores button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #06121f; }
+  #editor .erow { display: flex; gap: 6px; margin-top: 9px; }
+  #editor .erow button { flex: 1; }
+
+  .empty-state { color: var(--ink-faint); font-size: 13px; padding: 14px 0; }
+  .log { font: 12px/1.6 var(--mono); color: var(--ink-dim); max-height: 190px; overflow-y: auto; background: #0a0e14; border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; }
+  .log div { white-space: pre-wrap; word-break: break-word; }
+  .log .a { color: var(--agent); }
+  .log .h { color: var(--human); }
+  .log .e { color: var(--bad); }
+  footer { border-top: 1px solid var(--line); padding: 16px 22px; color: var(--ink-faint); font-size: 12.5px; }
+  .hint { font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; line-height: 1.5; }
+  code { font: 12px var(--mono); background: var(--panel-2); padding: 1.5px 5px; border-radius: 4px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Decision<span>Play</span> Live</div>
+    <div class="tagline">One decision board. A person and an agent, working it together.</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill" id="mcpPill">checking for agent…</span>
+  <span class="pill" id="evPill">evidence: idle</span>
+</header>
+
+<div id="connect" hidden>
+  <div class="connect-in">
+    <strong>No agent is connected, so you are driving this board yourself.</strong>
+    That works, and everything on the page is usable. To hand the research to an agent instead, open this
+    page in the <b>ChatGPT desktop app's in-app browser</b> (use GPT-5.6 Sol or Terra; Luna has WebMCP
+    turned off), or in <b>Chrome 149+</b> with <code>chrome://flags/#enable-webmcp-testing</code> enabled
+    and the browser restarted. Seven tools will register and the pill above will say so.
+    <button class="ghost" id="connectX" style="margin-left:8px">Dismiss</button>
+  </div>
+</div>
+
+<main>
+  <section class="col left">
+    <h2>The decision</h2>
+    <textarea id="qIn" rows="2" placeholder="Should we relocate the clinic to the east side?"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="qSet" class="primary">Set question</button>
+      <button id="demo" class="ghost">Load example</button>
+    </div>
+
+    <h2>Options</h2>
+    <div id="optList"></div>
+    <div class="row">
+      <input type="text" id="optIn" placeholder="Add an option">
+      <button id="optAdd">Add</button>
+    </div>
+
+    <h2>Criteria &amp; weights</h2>
+    <div id="critList"></div>
+    <div class="row">
+      <input type="text" id="critIn" placeholder="Add a criterion">
+      <input type="number" id="critW" class="weight" value="3" min="1" max="5">
+      <button id="critAdd">Add</button>
+    </div>
+    <div class="hint">Weight 1 to 5. Anything you change by hand is marked as yours, and the agent is told you overrode it.</div>
+
+    <h2>Activity</h2>
+    <div class="log" id="log" role="log" aria-live="polite" aria-label="Activity log"><div class="e">Waiting for the first move.</div></div>
+  </section>
+
+  <section class="col">
+    <h2>Scoring board</h2>
+    <div id="board"></div>
+
+    <h2>Verdict <span class="prov modeled">MODELED</span></h2>
+    <div class="verdict" id="verdict"></div>
+
+    <h2>Live evidence <span id="evCount" class="prov verified" style="display:none"></span></h2>
+    <div id="evidence"><div class="empty-state">No evidence gathered yet. Ask the agent to research an option, or use the buttons on the board.</div></div>
+  </section>
+</main>
+
+<div id="editor" hidden role="dialog" aria-label="Set score"></div>
+
+<footer>
+  Rankings are <strong>modeled</strong>: a weighted sum of scores on this board, not a measured outcome.
+  Evidence cards are live web results retrieved through SerpApi at the time shown, quoted with their source and link so you can check them.
+  This tool does not give legal, medical, or financial advice.
+</footer>
+
+<script>
+"use strict";
+
+/* ---------------------------------------------------------------- state */
+
+const S = {
+  question: "",
+  options: [],   // { id, label, note }
+  criteria: [],  // { id, label, weight }
+  scores: {},    // "optId|critId" -> { value, rationale, by: "agent"|"human", at }
+  evidence: [],  // { id, query, mode, items[], at, latencyMs, forOption }
+  log: [],
+};
+
+let uid = 0;
+const nid = (p) => `${p}${++uid}`;
+const keyOf = (o, c) => `${o}|${c}`;
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]
+));
+
+function log(msg, who = "") {
+  S.log.unshift({ msg, who, at: new Date() });
+  if (S.log.length > 60) S.log.pop();
+  renderLog();
+}
+
+function findOption(name) {
+  const n = String(name || "").trim().toLowerCase();
+  return S.options.find((o) => o.label.toLowerCase() === n)
+      || S.options.find((o) => o.label.toLowerCase().includes(n) && n.length > 2)
+      || null;
+}
+function findCriterion(name) {
+  const n = String(name || "").trim().toLowerCase();
+  return S.criteria.find((c) => c.label.toLowerCase() === n)
+      || S.criteria.find((c) => c.label.toLowerCase().includes(n) && n.length > 2)
+      || null;
+}
+
+/* ------------------------------------------------------------- scoring */
+
+function verdict() {
+  if (!S.options.length || !S.criteria.length) return null;
+  const totalW = S.criteria.reduce((a, c) => a + c.weight, 0) || 1;
+
+  const rows = S.options.map((o) => {
+    let sum = 0, filled = 0;
+    const per = S.criteria.map((c) => {
+      const s = S.scores[keyOf(o.id, c.id)];
+      if (s) { sum += s.value * c.weight; filled++; }
+      return { criterion: c.label, weight: c.weight, score: s ? s.value : null };
+    });
+    return {
+      option: o.label,
+      score: Math.round((sum / (totalW * 5)) * 1000) / 10, // 0-100
+      coverage: `${filled}/${S.criteria.length}`,
+      complete: filled === S.criteria.length,
+      per,
+    };
+  }).sort((a, b) => b.score - a.score);
+
+  // What would change my mind: the single criterion flip with the most leverage.
+  let flip = null;
+  if (rows.length >= 2) {
+    const gap = rows[0].score - rows[1].score;
+    let best = null;
+    for (const c of S.criteria) {
+      const lead = S.options.find((o) => o.label === rows[0].option);
+      const chal = S.options.find((o) => o.label === rows[1].option);
+      const sl = S.scores[keyOf(lead.id, c.id)];
+      const sc = S.scores[keyOf(chal.id, c.id)];
+      if (!sl || !sc) continue;
+      // swinging this one criterion to the challenger's favour, how much moves?
+      const swing = ((5 - sl.value) + (5 - sc.value) === 0)
+        ? 0
+        : ((sl.value - sc.value) * c.weight * 2) / (S.criteria.reduce((a, x) => a + x.weight, 0) * 5) * 100;
+      if (swing > 0 && (!best || swing > best.swing)) best = { criterion: c.label, swing: Math.round(swing * 10) / 10 };
+    }
+    flip = { gap: Math.round(gap * 10) / 10, lever: best };
+  }
+
+  const missing = [];
+  for (const o of S.options) {
+    for (const c of S.criteria) {
+      if (!S.scores[keyOf(o.id, c.id)]) missing.push(`${o.label} on ${c.label}`);
+    }
+  }
+
+  return { ranking: rows, flip, unscored: missing };
+}
+
+/* -------------------------------------------------------------- render */
+
+function renderLists() {
+  document.getElementById("optList").innerHTML = S.options.length
+    ? S.options.map((o) => `<div class="item"><div class="row"><span class="label">${esc(o.label)}</span>
+        <button class="del" data-del-opt="${o.id}" title="Remove">&times;</button></div>
+        ${o.note ? `<div class="meta">${esc(o.note)}</div>` : ""}</div>`).join("")
+    : `<div class="empty-state">No options yet.</div>`;
+
+  document.getElementById("critList").innerHTML = S.criteria.length
+    ? S.criteria.map((c) => `<div class="item"><div class="row"><span class="label">${esc(c.label)}</span>
+        <input type="number" class="weight" min="1" max="5" value="${c.weight}" data-w="${c.id}">
+        <button class="del" data-del-crit="${c.id}" title="Remove">&times;</button></div></div>`).join("")
+    : `<div class="empty-state">No criteria yet.</div>`;
+}
+
+function renderBoard() {
+  const el = document.getElementById("board");
+  if (!S.options.length || !S.criteria.length) {
+    el.innerHTML = `<div class="empty-state">Add at least one option and one criterion. The board fills in as scores arrive.</div>`;
+    return;
+  }
+  let h = `<table><thead><tr><th style="min-width:150px">Option</th>`;
+  for (const c of S.criteria) h += `<th class="crit">${esc(c.label)}<span class="w">weight ${c.weight}</span></th>`;
+  h += `</tr></thead><tbody>`;
+  for (const o of S.options) {
+    h += `<tr><td class="opt">${esc(o.label)}${o.note ? `<span class="note">${esc(o.note)}</span>` : ""}</td>`;
+    for (const c of S.criteria) {
+      const s = S.scores[keyOf(o.id, c.id)];
+      const lbl = s
+        ? `${o.label} on ${c.label}: ${s.value} out of 5, set by ${s.by === "agent" ? "the agent" : "you"}. Activate to change.`
+        : `${o.label} on ${c.label}: not scored. Activate to score.`;
+      h += `<td class="cell" role="button" tabindex="0" aria-label="${esc(lbl)}" data-o="${o.id}" data-c="${c.id}">`;
+      if (s) {
+        h += `<span class="score">${s.value}</span><span class="who ${s.by}">${s.by === "agent" ? "AGENT" : "YOU"}</span>`;
+        if (s.rationale) h += `<span class="rat">${esc(s.rationale)}</span>`;
+      } else {
+        h += `<span class="empty">&middot;</span>`;
+      }
+      h += `</td>`;
+    }
+    h += `</tr>`;
+  }
+  el.innerHTML = h + `</tbody></table>`;
+}
+
+function renderVerdict() {
+  const el = document.getElementById("verdict");
+  const v = verdict();
+  if (!v) { el.innerHTML = `<div class="empty-state">Needs at least one option and one criterion.</div>`; return; }
+
+  let h = v.ranking.map((r, i) => `
+    <div class="rank ${i === 0 ? "top" : ""}">
+      <span class="n">${i + 1}</span>
+      <span class="nm">${esc(r.option)}</span>
+      <span class="sc">${r.score}</span>
+    </div>
+    <div class="bar"><i style="width:${Math.max(0, Math.min(100, r.score))}%"></i></div>
+  `).join("");
+
+  h += `<div style="margin-top:14px;font-size:13px;color:var(--ink-dim)">`;
+  if (v.ranking[0] && v.ranking[0].score > 0) {
+    h += `<strong style="color:var(--ink)">Best current play:</strong> ${esc(v.ranking[0].option)}. `;
+  }
+  if (v.flip && v.flip.lever) {
+    h += `<br><strong style="color:var(--ink)">What would change my mind:</strong> the lead is ${v.flip.gap} points. `
+      + `Reversing <em>${esc(v.flip.lever.criterion)}</em> in the runner-up's favour moves roughly ${v.flip.lever.swing} points, `
+      + `which is ${v.flip.lever.swing >= v.flip.gap ? "enough to flip the ranking" : "not enough on its own"}.`;
+  }
+  if (v.unscored.length) {
+    h += `<br><strong style="color:var(--warn)">Still unscored:</strong> ${v.unscored.length} cell${v.unscored.length > 1 ? "s" : ""} `
+      + `(${esc(v.unscored.slice(0, 3).join("; "))}${v.unscored.length > 3 ? "; …" : ""}). The ranking treats these as zero, so it understates those options.`;
+  }
+  h += `</div>`;
+  el.innerHTML = h;
+}
+
+function renderEvidence() {
+  const el = document.getElementById("evidence");
+  const count = S.evidence.reduce((a, e) => a + (e.items ? e.items.length : 0), 0);
+  const badge = document.getElementById("evCount");
+  if (count) { badge.style.display = ""; badge.textContent = `${count} SOURCES`; }
+  else badge.style.display = "none";
+
+  if (!S.evidence.length) {
+    el.innerHTML = `<div class="empty-state">No evidence gathered yet. Ask the agent to research an option, or use the buttons on the board.</div>`;
+    return;
+  }
+  el.innerHTML = S.evidence.slice(0, 6).map((e) => {
+    const head = `<div style="margin:14px 0 8px;font-size:12.5px;color:var(--ink-faint)">
+      <span class="prov verified">LIVE</span>
+      &nbsp;“${esc(e.query)}” &middot; ${e.mode} &middot; ${e.items.length} result${e.items.length === 1 ? "" : "s"}
+      &middot; ${e.latencyMs}ms &middot; ${e.at.toLocaleTimeString()}</div>`;
+    const body = e.items.map((it) => `
+      <div class="ev">
+        <div class="t"><a href="${esc(it.link)}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a></div>
+        <div class="s">${esc(it.source || "")}${it.date ? " &middot; " + esc(it.date) : ""}</div>
+        ${it.snippet ? `<div class="sn">${esc(it.snippet)}</div>` : ""}
+      </div>`).join("");
+    return head + (body || `<div class="empty-state">No results returned.</div>`);
+  }).join("");
+}
+
+function renderLog() {
+  document.getElementById("log").innerHTML = S.log.length
+    ? S.log.map((l) => `<div class="${l.who}">${l.at.toLocaleTimeString()} ${esc(l.msg)}</div>`).join("")
+    : `<div class="e">Waiting for the first move.</div>`;
+}
+
+function render() { renderLists(); renderBoard(); renderVerdict(); renderEvidence(); }
+
+/* ------------------------------------------------------------ evidence */
+
+async function gather(query, mode = "web", recency = "any", forOption = null, signal = undefined) {
+  const pill = document.getElementById("evPill");
+  pill.textContent = "evidence: searching…";
+  try {
+    const res = await fetch("/api/evidence", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query, mode, recency }),
+      // Honor the agent's AbortSignal so a cancelled tool call actually cancels
+      // the network request instead of orphaning it.
+      signal,
+    });
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // A non-JSON body means the function is not reachable, usually because the
+      // page is being served without the Netlify function layer.
+      pill.textContent = "evidence: unavailable";
+      const msg = `Evidence endpoint returned a non-JSON response (HTTP ${res.status}). The SerpApi function is not reachable from this deploy.`;
+      log(msg, "e");
+      return { ok: false, error: msg };
+    }
+    if (!res.ok) {
+      pill.textContent = `evidence: ${data.error || "error"}`;
+      log(`evidence lookup failed: ${data.message || data.error}`, "e");
+      return { ok: false, error: data.message || data.error };
+    }
+    const items = mode === "related"
+      ? (data.questions || []).map((q) => ({ title: q.question, link: q.link, source: q.source, snippet: q.snippet, date: null }))
+      : (data.items || []);
+    const rec = { id: nid("e"), query, mode, items, at: new Date(), latencyMs: data.latencyMs, forOption };
+    S.evidence.unshift(rec);
+    pill.textContent = `evidence: ${items.length} results in ${data.latencyMs}ms`;
+    renderEvidence();
+    return { ok: true, items, latencyMs: data.latencyMs };
+  } catch (err) {
+    pill.textContent = "evidence: unreachable";
+    log(`evidence lookup failed: ${err}`, "e");
+    return { ok: false, error: String(err) };
+  }
+}
+
+/* ------------------------------------------------------------- actions */
+
+function setQuestion(q, by = "human") {
+  S.question = String(q || "").trim();
+  document.getElementById("qIn").value = S.question;
+  log(`${by === "agent" ? "agent" : "you"} set the question: ${S.question}`, by === "agent" ? "a" : "h");
+}
+function addOption(label, note = "", by = "human") {
+  label = String(label || "").trim();
+  if (!label) return null;
+  if (findOption(label)) return findOption(label);
+  const o = { id: nid("o"), label, note: String(note || "").trim() };
+  S.options.push(o);
+  log(`${by === "agent" ? "agent" : "you"} added option: ${label}`, by === "agent" ? "a" : "h");
+  render();
+  return o;
+}
+function addCriterion(label, weight = 3, by = "human") {
+  label = String(label || "").trim();
+  if (!label) return null;
+  if (findCriterion(label)) return findCriterion(label);
+  const w = Math.max(1, Math.min(5, Number(weight) || 3));
+  const c = { id: nid("c"), label, weight: w };
+  S.criteria.push(c);
+  log(`${by === "agent" ? "agent" : "you"} added criterion: ${label} (weight ${w})`, by === "agent" ? "a" : "h");
+  render();
+  return c;
+}
+function setScore(o, c, value, rationale, by) {
+  const v = Math.max(0, Math.min(5, Math.round(Number(value))));
+  const prev = S.scores[keyOf(o.id, c.id)];
+  S.scores[keyOf(o.id, c.id)] = { value: v, rationale: String(rationale || "").trim(), by, at: new Date(), overrode: prev && prev.by !== by ? prev.by : null };
+  const note = prev && prev.by === "agent" && by === "human" ? " (overriding the agent)" : "";
+  log(`${by === "agent" ? "agent" : "you"} scored ${o.label} on ${c.label}: ${v}/5${note}`, by === "agent" ? "a" : "h");
+  render();
+}
+
+/* ---------------------------------------------------------------- WebMCP
+   Tools are registered on document.modelContext per the WebMCP explainer.
+   Every tool mutates the same board the person is looking at, so the agent's
+   work is visible as it happens rather than returned into a chat transcript.  */
+
+const TOOLS = [
+  {
+    name: "get_board",
+    title: "Read the decision board",
+    description: "Read the entire current decision board: the question, options, criteria and their weights, every score with who set it, the current ranking, and which cells are still unscored. Call this before making changes so you do not duplicate work, and call it again after the person edits something to see what they changed.",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {} },
+    execute: async () => {
+      const v = verdict();
+      return {
+        question: S.question || null,
+        options: S.options.map((o) => ({ label: o.label, note: o.note || null })),
+        criteria: S.criteria.map((c) => ({ label: c.label, weight: c.weight })),
+        scores: Object.entries(S.scores).map(([k, s]) => {
+          const [oid, cid] = k.split("|");
+          const o = S.options.find((x) => x.id === oid), c = S.criteria.find((x) => x.id === cid);
+          if (!o || !c) return null;
+          return {
+            option: o.label, criterion: c.label, score: s.value,
+            setBy: s.by, rationale: s.rationale || null,
+            overrodeAgent: s.by === "human" && s.overrode === "agent",
+          };
+        }).filter(Boolean),
+        ranking: v ? v.ranking.map((r) => ({ option: r.option, score: r.score, coverage: r.coverage })) : [],
+        unscored: v ? v.unscored : [],
+        evidenceGathered: S.evidence.map((e) => ({ query: e.query, mode: e.mode, results: e.items.length })),
+      };
+    },
+  },
+  {
+    name: "set_decision",
+    title: "Set the decision question",
+    description: "Set or replace the decision question at the top of the board. Use the person's own framing of the decision, not a rewritten version.",
+    inputSchema: {
+      type: "object",
+      properties: { question: { type: "string", description: "The decision being made, as a question." } },
+      required: ["question"],
+    },
+    execute: async ({ question }) => { setQuestion(question, "agent"); return `Question set to: ${S.question}`; },
+  },
+  {
+    name: "add_option",
+    title: "Add an option",
+    description: "Add one option the person could choose. Options are the things being compared. Adding an option that already exists is a no-op, so it is safe to retry.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "Short name for the option, a few words." },
+        note: { type: "string", description: "Optional one-line clarification of what this option actually means." },
+      },
+      required: ["label"],
+    },
+    execute: async ({ label, note }) => {
+      const existing = findOption(label);
+      if (existing) return `"${existing.label}" is already on the board. Nothing added. Current options: ${S.options.map((x) => x.label).join(", ")}.`;
+      const o = addOption(label, note, "agent");
+      return o ? `Added option "${o.label}". Board now has ${S.options.length} option(s).` : "Could not add an empty option.";
+    },
+  },
+  {
+    name: "add_criterion",
+    title: "Add a weighted criterion",
+    description: "Add one criterion the options will be judged on, with a weight from 1 to 5 where 5 matters most. Good criteria are things that can actually differ between the options. Ask the person about weights rather than assuming, unless they have already told you what matters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "Short name for the criterion." },
+        weight: { type: "integer", minimum: 1, maximum: 5, description: "How much this matters, 1 to 5. Defaults to 3." },
+      },
+      required: ["label"],
+    },
+    execute: async ({ label, weight }) => {
+      const existing = findCriterion(label);
+      if (existing) return `"${existing.label}" is already a criterion, at weight ${existing.weight}. Nothing added.`;
+      const c = addCriterion(label, weight ?? 3, "agent");
+      return c ? `Added criterion "${c.label}" at weight ${c.weight}.` : "Could not add an empty criterion.";
+    },
+  },
+  {
+    name: "gather_evidence",
+    title: "Search the live web for evidence",
+    // Results are arbitrary third-party web content entering the agent's
+    // context. Flagging it is the whole point of untrustedContentHint.
+    annotations: { untrustedContentHint: true },
+    description: "Run a live web search through SerpApi and pin the results to the board where the person can see and click them. Use this before scoring anything you are not certain about, especially for facts that change over time such as prices, rules, availability, or recent events. The results are real search results with their source and link, not recalled from memory.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query. Write it the way you would actually search, not as a question to the model." },
+        mode: { type: "string", enum: ["web", "news", "related"], description: "web for general results, news for recent coverage and volatility, related for the questions other people ask about this. Defaults to web." },
+        recency: { type: "string", enum: ["any", "year", "month", "week"], description: "Restrict web results by age. Use month or week when the fact is time-sensitive." },
+      },
+      required: ["query"],
+    },
+    execute: async ({ query, mode, recency }, opts) => {
+      const r = await gather(query, mode || "web", recency || "any", null, opts && opts.signal);
+      if (!r.ok) return `Evidence lookup failed: ${r.error}`;
+      if (!r.items.length) return `No results for "${query}". Try different wording before concluding there is nothing.`;
+      return {
+        query, resultCount: r.items.length, latencyMs: r.latencyMs,
+        results: r.items.map((i) => ({ title: i.title, source: i.source, date: i.date, snippet: i.snippet, link: i.link })),
+        note: "These are now visible to the person on the board. Cite the source when you use one to justify a score.",
+      };
+    },
+  },
+  {
+    name: "score_option",
+    title: "Score an option on a criterion",
+    description: "Score one option on one criterion, 0 to 5, with a short rationale the person will read on the board. Score only what you can justify; if the person already set this cell by hand, prefer leaving it alone and say so rather than overwriting their judgment.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        option: { type: "string", description: "The option label, as it appears on the board." },
+        criterion: { type: "string", description: "The criterion label, as it appears on the board." },
+        score: { type: "integer", minimum: 0, maximum: 5, description: "0 is worst, 5 is best, on this criterion only." },
+        rationale: { type: "string", description: "One short sentence. Name the source if this came from gathered evidence." },
+      },
+      required: ["option", "criterion", "score"],
+    },
+    execute: async ({ option, criterion, score, rationale }) => {
+      const o = findOption(option), c = findCriterion(criterion);
+      if (!o) return `No option matching "${option}". Current options: ${S.options.map((x) => x.label).join(", ") || "none"}.`;
+      if (!c) return `No criterion matching "${criterion}". Current criteria: ${S.criteria.map((x) => x.label).join(", ") || "none"}.`;
+      const prev = S.scores[keyOf(o.id, c.id)];
+      if (prev && prev.by === "human") {
+        return `"${o.label}" on "${c.label}" was set to ${prev.value} by the person. Left unchanged. Tell them what you would have scored it and why, and let them decide.`;
+      }
+      setScore(o, c, score, rationale, "agent");
+      return `Scored ${o.label} on ${c.label}: ${S.scores[keyOf(o.id, c.id)].value}/5.`;
+    },
+  },
+  {
+    name: "explain_verdict",
+    title: "Explain the ranking and what would flip it",
+    description: "Compute the current ranking and the single criterion with the most leverage to flip it. Use this to tell the person where the decision actually turns, and what evidence would be worth gathering next.",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {} },
+    execute: async () => {
+      const v = verdict();
+      if (!v) return "The board needs at least one option and one criterion before there is anything to rank.";
+      return {
+        ranking: v.ranking.map((r, i) => ({ rank: i + 1, option: r.option, weightedScore: r.score, coverage: r.coverage })),
+        margin: v.flip ? v.flip.gap : null,
+        mostLeveragedCriterion: v.flip && v.flip.lever ? v.flip.lever : null,
+        unscoredCells: v.unscored,
+        caveat: "This ranking is a weighted sum of the scores on this board. It is modeled, not measured, and unscored cells count as zero.",
+      };
+    },
+  },
+];
+
+function registerTools() {
+  const pill = document.getElementById("mcpPill");
+  const mc = document.modelContext;
+  if (!mc || typeof mc.registerTool !== "function") {
+    pill.textContent = "no agent connected";
+    pill.className = "pill off";
+    pill.title = "Open this page in the ChatGPT desktop app's browser, or Chrome 149+ with chrome://flags/#enable-webmcp-testing enabled.";
+    document.getElementById("connect").hidden = false;
+    return;
+  }
+  const controller = new AbortController();
+  let ok = 0;
+  Promise.all(TOOLS.map((t) =>
+    mc.registerTool({
+      name: t.name,
+      title: t.title,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      annotations: t.annotations,
+      // Normalize to the MCP content shape the explainer uses, so results
+      // pass through every client layer unmodified.
+      execute: async (input, opts) => {
+        try {
+          const out = await t.execute(input || {}, opts || {});
+          const text = typeof out === "string" ? out : JSON.stringify(out, null, 2);
+          return { content: [{ type: "text", text }] };
+        } catch (err) {
+          return { content: [{ type: "text", text: `Tool failed: ${err && err.message ? err.message : err}` }], isError: true };
+        }
+      },
+    }, { signal: controller.signal }).then(() => { ok++; })
+      .catch((e) => log(`could not register ${t.name}: ${e && e.message ? e.message : e}`, "e"))
+  )).then(() => {
+    pill.textContent = `agent connected · ${ok} tools`;
+    pill.className = "pill on";
+    log(`${ok} tools registered for the agent`, "a");
+  });
+}
+
+/* ------------------------------------------------------- score editor */
+
+let EDIT = null; // { o, c, pending }
+
+function openEditor(cell) {
+  const o = S.options.find((x) => x.id === cell.dataset.o);
+  const c = S.criteria.find((x) => x.id === cell.dataset.c);
+  if (!o || !c) return;
+  const cur = S.scores[keyOf(o.id, c.id)];
+  EDIT = { o, c, pending: cur ? cur.value : null, anchor: cell };
+
+  const ed = document.getElementById("editor");
+  const wasAgent = cur && cur.by === "agent";
+  ed.innerHTML =
+    `<div class="eh"><b>${esc(o.label)}</b> on <b>${esc(c.label)}</b>` +
+    (cur
+      ? `<br><span class="${wasAgent ? "was" : ""}">Currently ${cur.value}, set by ${wasAgent ? "the agent" : "you"}.` +
+        (wasAgent ? " Changing it marks this cell as yours and tells the agent you overrode it." : "") + `</span>`
+      : `<br>Not scored yet. 0 is worst, 5 is best.`) +
+    `</div>` +
+    `<div class="scores" role="group" aria-label="Score from 0 to 5">` +
+    [0, 1, 2, 3, 4, 5].map((n) =>
+      `<button type="button" data-score="${n}" aria-pressed="${EDIT.pending === n}">${n}</button>`).join("") +
+    `</div>` +
+    `<input type="text" id="edRat" maxlength="140" placeholder="Why? (optional)" value="${esc(cur && cur.by === "human" ? cur.rationale : "")}">` +
+    `<div class="erow">` +
+      `<button type="button" class="primary" id="edSave">Save</button>` +
+      (cur ? `<button type="button" id="edClear">Clear</button>` : "") +
+      `<button type="button" class="ghost" id="edCancel">Cancel</button>` +
+    `</div>`;
+
+  ed.hidden = false;
+  const r = cell.getBoundingClientRect();
+  const top = window.scrollY + r.bottom + 6;
+  const left = Math.max(8, Math.min(
+    window.scrollX + r.left + r.width / 2 - 134,
+    window.scrollX + document.documentElement.clientWidth - 276,
+  ));
+  ed.style.top = `${top}px`;
+  ed.style.left = `${left}px`;
+
+  ed.querySelectorAll("[data-score]").forEach((b) => {
+    b.onclick = () => {
+      EDIT.pending = Number(b.dataset.score);
+      ed.querySelectorAll("[data-score]").forEach((x) =>
+        x.setAttribute("aria-pressed", String(Number(x.dataset.score) === EDIT.pending)));
+    };
+  });
+  ed.querySelector("#edSave").onclick = commitEditor;
+  ed.querySelector("#edCancel").onclick = closeEditor;
+  const clr = ed.querySelector("#edClear");
+  if (clr) clr.onclick = () => {
+    delete S.scores[keyOf(EDIT.o.id, EDIT.c.id)];
+    log(`you cleared the score on ${EDIT.o.label} / ${EDIT.c.label}`, "h");
+    closeEditor(); render();
+  };
+  ed.querySelector("#edRat").onkeydown = (e) => { if (e.key === "Enter") commitEditor(); };
+  (ed.querySelector('[aria-pressed="true"]') || ed.querySelector("[data-score]")).focus();
+}
+
+function commitEditor() {
+  if (!EDIT || EDIT.pending === null) { closeEditor(); return; }
+  const rat = (document.getElementById("edRat") || {}).value || "";
+  setScore(EDIT.o, EDIT.c, EDIT.pending, rat, "human");
+  closeEditor();
+}
+
+function closeEditor() {
+  const ed = document.getElementById("editor");
+  const anchor = EDIT && EDIT.anchor;
+  ed.hidden = true; ed.innerHTML = ""; EDIT = null;
+  if (anchor && document.contains(anchor)) anchor.focus();
+}
+
+/* ------------------------------------------------------------------ UI */
+
+document.getElementById("qSet").onclick = () => { setQuestion(document.getElementById("qIn").value); render(); };
+document.getElementById("optAdd").onclick = () => {
+  const i = document.getElementById("optIn"); addOption(i.value); i.value = "";
+};
+document.getElementById("optIn").onkeydown = (e) => { if (e.key === "Enter") document.getElementById("optAdd").click(); };
+document.getElementById("critAdd").onclick = () => {
+  const i = document.getElementById("critIn"), w = document.getElementById("critW");
+  addCriterion(i.value, w.value); i.value = "";
+};
+document.getElementById("critIn").onkeydown = (e) => { if (e.key === "Enter") document.getElementById("critAdd").click(); };
+
+document.addEventListener("click", (e) => {
+  const dO = e.target.closest("[data-del-opt]");
+  if (dO) { const id = dO.dataset.delOpt; S.options = S.options.filter((o) => o.id !== id);
+    Object.keys(S.scores).forEach((k) => { if (k.startsWith(id + "|")) delete S.scores[k]; }); render(); return; }
+  const dC = e.target.closest("[data-del-crit]");
+  if (dC) { const id = dC.dataset.delCrit; S.criteria = S.criteria.filter((c) => c.id !== id);
+    Object.keys(S.scores).forEach((k) => { if (k.endsWith("|" + id)) delete S.scores[k]; }); render(); return; }
+  const cell = e.target.closest(".cell");
+  if (cell) { openEditor(cell); return; }
+  if (!e.target.closest("#editor")) closeEditor();
+});
+
+// Cells are keyboard operable, so the override path works without a mouse.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeEditor(); return; }
+  const cell = e.target.closest && e.target.closest(".cell");
+  if (cell && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openEditor(cell); }
+});
+
+document.addEventListener("change", (e) => {
+  const w = e.target.closest("[data-w]");
+  if (w) {
+    const c = S.criteria.find((x) => x.id === w.dataset.w);
+    if (c) { c.weight = Math.max(1, Math.min(5, Number(w.value) || 3));
+      log(`you changed the weight on ${c.label} to ${c.weight}`, "h"); render(); }
+  }
+});
+
+document.getElementById("demo").onclick = () => {
+  setQuestion("Where should a small Michigan nonprofit put its one new community health worker in 2026?");
+  ["Wayne County", "Genesee County", "Marquette County"].forEach((l) => addOption(l));
+  [["Unmet need", 5], ["Existing coverage", 4], ["Travel burden", 3], ["Funding available", 4]].forEach(([l, w]) => addCriterion(l, w));
+  render();
+  log("example loaded. ask your agent to research and score it.", "h");
+};
+
+document.getElementById("connectX").onclick = () => { document.getElementById("connect").hidden = true; };
+
+registerTools();
+render();
+log("board ready", "h");
+
+// ?example=1 preloads the sample board, so a demo or recording can start on a
+// populated screen instead of an empty one.
+if (new URLSearchParams(location.search).get("example") === "1") {
+  document.getElementById("demo").click();
+}
+</script>
+</body>
+</html>

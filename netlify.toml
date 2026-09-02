@@ -1,0 +1,15 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# WebMCP requires that the tools Permissions Policy is not disabled.
+# Nothing here sets `Permissions-Policy: tools=()`, which would break
+# document.modelContext.registerTool() for judges.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
