@@ -1,5 +1,9 @@
 # DecisionPlay Live
 
+> **Status: superseded.** Development continues in DecisionPlay at https://decisionplay.app.
+> This repository is kept as the hackathon submission, and the demo below stays up until
+> judging ends. No further development happens here.
+
 **One decision board. A person and an agent, working it together.**
 
 Live: **https://decisionplay-live.netlify.app**
